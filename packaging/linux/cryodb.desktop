@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=CryoDB
+Comment=Multi-driver SQL client
+Exec=cryodb
+Icon=cryodb
+Terminal=false
+Type=Application
+Categories=Development;Database;
+StartupNotify=true

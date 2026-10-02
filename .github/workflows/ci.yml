@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-tree:
+    name: Public tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject private, hidden or generated paths
+        run: |
+          set -euo pipefail
+          hidden=$(git ls-files | grep -E '(^|/)\.' | grep -vE '^\.gitignore$|^\.github/workflows/[^/]+\.yml$' || true)
+          private=$(git ls-files | grep -iE '(^|/)(agents|claude|gemini)\.md$|(^|/)opencode\.jsonc?$|(^|/)(target|dist)/|\.(key|pem|log)$' || true)
+          [ -z "$hidden$private" ] || { printf '::error::not allowed in the public tree:\n%s\n%s\n' "$hidden" "$private"; exit 1; }
+
+      - name: Reject comments in project code
+        run: |
+          set -euo pipefail
+          found=$(git grep -nE '^\s*(//|/\*)' -- '*.rs' || true)
+          found+=$(git grep -nE '^\s*#([^!]|$)' -- '*.sh' 'Cargo.toml' 'tools/*/Cargo.toml' || true)
+          [ -z "$found" ] || { printf '::error::comments found:\n%s\n' "$found"; exit 1; }
+
+  linux:
+    name: Linux (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-ci-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-ci-
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo test --locked --manifest-path tools/cryodb-release/Cargo.toml
+
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x64
+            features: renderer-wgpu-windows-dx12
+          - os: macos-latest
+            label: macos-arm64
+            features: renderer-wgpu-macos-metal
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ matrix.label }}-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.label }}-registry-
+
+      - run: cargo build --locked --no-default-features --features ${{ matrix.features }}

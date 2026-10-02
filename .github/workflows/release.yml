@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PROTOCOL: "1"
+  MANIFEST_URL: "https://cryodb.znxr.dev/latest.json"
+
+jobs:
+  guard:
+    name: Version matches tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Cargo.toml, Cargo.lock and CHANGELOG.md
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          CARGO=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          LOCK=$(awk '/^name = "cryodb"$/{getline; sub(/version = "/,""); sub(/"$/,""); print; exit}' Cargo.lock)
+          [ "$TAG" = "$CARGO" ] || { echo "::error::tag v$TAG does not match Cargo.toml ($CARGO)"; exit 1; }
+          [ "$TAG" = "$LOCK" ] || { echo "::error::Cargo.lock says $LOCK"; exit 1; }
+          grep -qE "^## \[$TAG\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$TAG]' section"; exit 1; }
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: guard
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            features: renderer-wgpu-dual
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x64
+            features: renderer-wgpu-windows-dx12
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-arm64
+            features: renderer-wgpu-macos-metal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/lib/jvm || true
+          df -h /
+
+      - name: Install system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config libssl-dev libxkbcommon-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libgtk-3-dev libclang-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: >
+          cargo build --release --locked
+          --no-default-features --features ${{ matrix.features }}
+          --target ${{ matrix.target }}
+
+      - name: Package Linux AppImage
+        if: matrix.label == 'linux-x64'
+        shell: bash
+        run: packaging/linux/build-appimage.sh "${GITHUB_REF_NAME#v}" "${{ matrix.target }}"
+
+      - name: Package Windows zip
+        if: matrix.label == 'windows-x64'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "target/${{ matrix.target }}/release/cryodb.exe" `
+            -DestinationPath "dist/cryodb-windows-x64.zip" -Force
+
+      - name: Package macOS installer and update payload
+        if: matrix.label == 'macos-arm64'
+        shell: bash
+        run: packaging/macos/build.sh "${{ matrix.target }}" "${GITHUB_REF_NAME#v}" arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Sign and publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Build the signer
+        run: cargo build --release --locked --manifest-path tools/cryodb-release/Cargo.toml
+
+      - name: Sign latest.json
+        env:
+          UPDATE_KEY: ${{ secrets.CRYODB_UPDATE_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$UPDATE_KEY" ] || { echo "::error::CRYODB_UPDATE_KEY is not set"; exit 1; }
+          printf 'private %s\n' "$UPDATE_KEY" > update.key
+          args=()
+          [ -f dist/cryodb-linux-x64.AppImage ] && args+=(--artifact linux-x64-appimage=dist/cryodb-linux-x64.AppImage)
+          [ -f dist/cryodb-windows-x64.zip ] && args+=(--artifact windows-x64=dist/cryodb-windows-x64.zip)
+          [ -f dist/cryodb-macos-arm64.tar.gz ] && args+=(--artifact macos-arm64=dist/cryodb-macos-arm64.tar.gz)
+          ./tools/cryodb-release/target/release/cryodb-release sign \
+            --version "${GITHUB_REF_NAME#v}" \
+            --protocol "$PROTOCOL" \
+            --key update.key \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+            "${args[@]}" \
+            --out dist/latest.json
+          rm -f update.key
+          PUBKEY=$(sed -n '/const UPDATE_PUBKEY/,+1p' src/update/mod.rs | grep -oE '[0-9a-f]{64}' | head -1)
+          ./tools/cryodb-release/target/release/cryodb-release verify --pubkey "$PUBKEY" dist/latest.json
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "CryoDB $VERSION" --notes-file notes.md
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+
+      - name: Verify the live manifest
+        run: |
+          set -euo pipefail
+          sleep 10
+          curl -fsSL "$MANIFEST_URL" -o live.json
+          grep -q "\"version\": \"${GITHUB_REF_NAME#v}\"" live.json
+          PUBKEY=$(sed -n '/const UPDATE_PUBKEY/,+1p' src/update/mod.rs | grep -oE '[0-9a-f]{64}' | head -1)
+          ./tools/cryodb-release/target/release/cryodb-release verify --pubkey "$PUBKEY" live.json
