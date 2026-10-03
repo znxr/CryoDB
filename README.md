@@ -10,6 +10,8 @@ It provides multiple interfaces for managing, exploring, and querying databases:
 
 All interfaces are powered by a shared core engine, providing a consistent experience across desktop, terminal, and automation workflows.
 
+https://github.com/user-attachments/assets/ab1c78b3-e296-41f8-907d-4e35154d31a0
+
 ---
 
 ## Features
