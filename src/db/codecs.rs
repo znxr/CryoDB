@@ -648,8 +648,10 @@ fn postgres_raw_value(row: &PgRow, index: usize) -> Option<String> {
             let dimensions = usize::from(u16::from_be_bytes(bytes.get(..2)?.try_into().ok()?));
             let values = bytes
                 .get(4..4 + dimensions * 4)?
-                .chunks_exact(4)
-                .map(|chunk| f32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|chunk| f32::from_be_bytes(*chunk));
             Some(format_array_values(values.collect()))
         }
         _ => binary_text_value(bytes),

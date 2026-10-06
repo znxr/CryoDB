@@ -420,7 +420,7 @@ impl<'a> View<'a> {
             self.state.values.modal_backdrop_dim,
             Message::ModalBackdropDimChanged,
         )
-        .step(0.01)
+        .step(0.01_f32)
         .width(Fill);
 
         let large_sidebar_buttons_toggle = row![
