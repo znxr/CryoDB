@@ -11,7 +11,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Write entries for users, not for the commit log: say what changed in the app,
 not which module was refactored.
 
-## [Unreleased]
+## [0.4.0] - 2026-10-06
 
 ### Changed
 
@@ -27,7 +27,7 @@ not which module was refactored.
 - The query editor opens at a compact fixed height until the split is dragged.
 - The schema autocomplete list is drawn over the window, so it keeps its full size no matter how short the editor is. Arrow keys move through it, Enter or Tab accepts, Escape closes.
 - The CryoDB command palette moved to Ctrl+Shift+O, leaving Ctrl+Shift+P to the query editor's own palette. A stored Ctrl+Shift+P binding is migrated to the new default.
-- Escape releases the query editor, so app shortcuts the editor binds itself — such as the sidebar search — work again without leaving the keyboard.
+- Escape releases the query editor, so app shortcuts the editor binds itself, such as the sidebar search, work again without leaving the keyboard.
 - Modern theme inactive tabs keep a muted underline, so the tab strip reads as one rail. The underline is a single pixel, matching the sidebar header's, and the tabs sit flush against each other.
 - The sidebar and AI chat show a grip on their resize edge in the Original theme, and pane splits are easier to grab.
 - Dragging a tab now carries the tab under the pointer and highlights the slot it will drop into.

@@ -1,6 +1,6 @@
 [package]
 name = "cryodb"
-version = "0.3.3"
+version = "0.4.0"
 authors = ["Mauricio Orquin <znxr.dev>"]
 edition = "2024"
 publish = false

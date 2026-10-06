@@ -25,7 +25,7 @@ jobs:
       - name: Reject private, hidden or generated paths
         run: |
           set -euo pipefail
-          hidden=$(git ls-files | grep -E '(^|/)\.' | grep -vE '^\.gitignore$|^\.github/workflows/[^/]+\.yml$' || true)
+          hidden=$(git ls-files | grep -E '(^|/)\.' | grep -vE '^\.gitignore$|^\.github/workflows/[^/]+\.yml$|^\.github/CODEOWNERS$' || true)
           private=$(git ls-files | grep -iE '(^|/)(agents|claude|gemini)\.md$|(^|/)opencode\.jsonc?$|(^|/)(target|dist)/|\.(key|pem|log)$' || true)
           [ -z "$hidden$private" ] || { printf '::error::not allowed in the public tree:\n%s\n%s\n' "$hidden" "$private"; exit 1; }
 
