@@ -11,6 +11,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Write entries for users, not for the commit log: say what changed in the app,
 not which module was refactored.
 
+## [0.5.0] - 2026-10-11
+
+### Added
+
+- Table filters: narrow any table by one or more conditions (column, operator and value), match all or any of them, or write a raw SQL condition. Open them from the funnel button in the toolbar or with Ctrl+Alt+F (Cmd+Option+F on macOS); the shortcut can be changed in Settings.
+- Right-click a cell to filter by its value, exclude it, or start a filter on its column.
+- An active filter shows as a badge in the bottom bar, and its close button removes it.
+
+### Changed
+
+- Following a foreign key opens the target table with a regular filter you can see and edit.
+- `cryodb query --format json` always prints a list: statements that change rows return `[{"rows_affected": N}]`.
+
+### Fixed
+
+- Clicking a cell, the sidebar search or any other field takes the keyboard away from the query editor, so editing a value no longer types into the editor.
+- The CLI sends accented and other non-ASCII characters correctly instead of storing them double-encoded.
+- The CLI runs CREATE TRIGGER, PROCEDURE and FUNCTION statements with BEGIN...END bodies.
+- `cryodb run` understands DELIMITER, so mysqldump and mariadb-dump files with triggers or procedures run as they are.
+
 ## [0.4.0] - 2026-10-06
 
 ### Changed
