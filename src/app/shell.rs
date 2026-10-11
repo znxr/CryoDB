@@ -30,6 +30,7 @@ pub(crate) enum Message {
     ToggleSidebar,
     PaneResized(pane_grid::ResizeEvent),
     GlobalPointerReleased,
+    PointerPressed(Point),
     ClientKeyPressed(keyboard::Event),
     WindowResized(Size),
     AiPulseTick,

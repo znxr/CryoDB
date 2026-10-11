@@ -18,7 +18,7 @@ use crate::constants::{
 };
 use crate::model::connection::DatabaseDriver;
 use crate::model::table::{PostgresRoleModalTab, ResultSet, TableCommand, TableModalState};
-use crate::ui::ids::{omni_bar_input_id, query_editor_id, table_search_input_id, text_field_id};
+use crate::ui::ids::{omni_bar_input_id, query_editor_id, text_field_id};
 use iced::widget::text_editor;
 use iced::{Point, Task, keyboard};
 use std::path::PathBuf;
@@ -892,6 +892,12 @@ impl App {
 
                 Task::none()
             }
+            Message::Shell(crate::app::shell::Message::PointerPressed(position)) => {
+                if !self.workspace.query.editor_bounds.get().contains(position) {
+                    self.blur_query_editor();
+                }
+                Task::none()
+            }
             Message::Shell(crate::app::shell::Message::GlobalPointerReleased) => {
                 self.workspace.query.editor_resize_drag = None;
                 if self.workspace.tabs.drag_tab.is_some()
@@ -1300,7 +1306,7 @@ impl App {
                     .focus_table_search_shortcut
                     .matches_key(&key, modifiers)
                 {
-                    return iced::widget::operation::focus(table_search_input_id());
+                    return self.focus_sidebar_input();
                 }
                 if self
                     .settings
@@ -1374,6 +1380,18 @@ impl App {
                 {
                     return self.update(Message::Workspace(
                         crate::app::features::workspace::Message::OpenTableInfoSidebar,
+                    ));
+                }
+                if self
+                    .settings
+                    .values
+                    .toggle_filter_shortcut
+                    .matches_key(&key, modifiers)
+                {
+                    return self.update(Message::Workspace(
+                        crate::app::features::workspace::Message::Results(
+                            crate::app::features::workspace::results::Message::ToggleFilterBar,
+                        ),
                     ));
                 }
                 if self
@@ -1460,8 +1478,7 @@ impl App {
                         if self.workspace.results.editing_cell.is_some() {
                             self.workspace.results.editing_cell = None;
                         }
-                        self.workspace.query.editor.lose_focus();
-                        self.workspace.query.editor_blurred = true;
+                        self.blur_query_editor();
                         Task::none()
                     }
                     keyboard::Key::Named(keyboard::key::Named::Delete) => {

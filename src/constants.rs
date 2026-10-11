@@ -174,6 +174,7 @@ pub(crate) const ICON_SETTINGS: char = '\u{F0E9}';
 pub(crate) const ICON_MORE_OPTIONS: char = '\u{EF78}';
 pub(crate) const ICON_MORE_CONNECTIONS: char = '\u{EA12}';
 pub(crate) const ICON_FILTER_LINE: char = '\u{ED24}';
+pub(crate) const ICON_FUNNEL_LINE: char = '\u{ED27}';
 pub(crate) const ICON_CHECK_FILL: char = '\u{EB7A}';
 pub(crate) const ICON_CLIPBOARD_LINE: char = '\u{EB90}';
 pub(crate) const ICON_COPY: char = '\u{EB87}';

@@ -297,6 +297,7 @@ impl App {
         self.workspace.table_inactive_since = session.table_inactive_since;
         self.workspace.inactive_table_tabs_released = session.inactive_table_tabs_released;
         self.workspace.table_filters = session.table_filters;
+        self.workspace.filter_draft = None;
         self.workspace.table_sorts = session.table_sorts;
         self.workspace.explorer.selected_postgres_object = session.selected_postgres_object;
         if let Some(index) = self.workspace.tabs.active_query_tab
@@ -326,6 +327,7 @@ impl App {
         self.clear_table_cache();
         self.workspace.table_filters.clear();
         self.workspace.table_sorts.clear();
+        self.workspace.filter_draft = None;
         self.workspace.tabs.pinned_table_tabs.clear();
         self.workspace.selected_table = None;
         self.workspace.explorer.selected_postgres_object = None;
@@ -900,6 +902,7 @@ impl App {
         if !self.connections.connected || self.is_sidebar_hidden() {
             return Task::none();
         }
+        self.blur_query_editor();
         iced::widget::operation::focus(table_search_input_id())
     }
 }

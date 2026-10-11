@@ -11,7 +11,9 @@ use crate::constants::CHANGELOG_TOAST_TIMEOUT_SECS;
 #[cfg(test)]
 use crate::model::connection::DatabaseDriver;
 #[cfg(test)]
-use crate::model::table::{ColumnKind, ResultSet, TableCacheEntry, TableRelationFilter};
+use crate::model::table::{
+    ColumnKind, FilterOperator, FilterRule, ResultSet, TableCacheEntry, TableFilter,
+};
 #[cfg(test)]
 use iced_code_editor::Message as CodeEditorMessage;
 
@@ -440,9 +442,13 @@ mod results_pagination_tests {
         let mut app = app_with_page_size(100);
         app.workspace.table_filters.insert(
             String::from("orders"),
-            TableRelationFilter {
-                column: String::from("customer_id"),
-                value: String::from("7"),
+            TableFilter {
+                rules: vec![FilterRule {
+                    column: String::from("customer_id"),
+                    operator: FilterOperator::Equals,
+                    value: String::from("7"),
+                }],
+                match_any: false,
             },
         );
 
@@ -451,5 +457,31 @@ mod results_pagination_tests {
         assert!(count.starts_with("SELECT COUNT(*) FROM"));
         assert!(count.contains("customer_id"));
         assert!(count.contains("'7'"));
+    }
+
+    #[test]
+    fn filter_rules_join_with_the_chosen_match_mode() {
+        let app = app_with_page_size(100);
+        let rule = |column: &str, operator, value: &str| FilterRule {
+            column: column.to_string(),
+            operator,
+            value: value.to_string(),
+        };
+        let mut filter = TableFilter {
+            rules: vec![
+                rule("name", FilterOperator::Contains, "Ju'an"),
+                rule("deleted_at", FilterOperator::IsNull, ""),
+                rule("", FilterOperator::Sql, "age > 18 OR vip"),
+                rule("", FilterOperator::Equals, "ignored"),
+            ],
+            match_any: false,
+        };
+
+        assert_eq!(
+            app.table_filter_clause(&filter),
+            " WHERE `name` LIKE '%Ju''an%' AND `deleted_at` IS NULL AND (age > 18 OR vip)"
+        );
+        filter.match_any = true;
+        assert!(app.table_filter_clause(&filter).contains("IS NULL OR (age"));
     }
 }

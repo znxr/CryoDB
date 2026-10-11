@@ -4,7 +4,7 @@ use crate::db::DatabasePool;
 use crate::model::connection::ConnectionInfo;
 use crate::model::table::{
     PostgresSidebarObject, RelationInfo, SidebarRelationEntry, SidebarTriggerEntry,
-    TableCacheEntry, TableFolder, TableRelationFilter, TableSortState, TriggerInfo,
+    TableCacheEntry, TableFilter, TableFolder, TableSortState, TriggerInfo,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -23,7 +23,7 @@ pub(crate) struct DatabaseSessionState {
     pub(crate) table_cache_bytes_estimate: usize,
     pub(crate) table_inactive_since: HashMap<String, std::time::Instant>,
     pub(crate) inactive_table_tabs_released: HashSet<String>,
-    pub(crate) table_filters: HashMap<String, TableRelationFilter>,
+    pub(crate) table_filters: HashMap<String, TableFilter>,
     pub(crate) table_sorts: HashMap<String, TableSortState>,
     pub(crate) selected_postgres_object: Option<PostgresSidebarObject>,
 }

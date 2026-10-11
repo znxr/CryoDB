@@ -7,17 +7,19 @@ use crate::constants::{
     COLUMN_RESIZE_HANDLE_HEIGHT, COLUMN_RESIZE_HANDLE_WIDTH, ICON_AI, ICON_ARROW_LEFT_DOUBLE_LINE,
     ICON_ARROW_LEFT_S_LINE, ICON_ARROW_RIGHT_DOUBLE_LINE, ICON_ARROW_RIGHT_S_LINE,
     ICON_ARROW_RIGHT_UP_LINE, ICON_BOTTOM_CHAT, ICON_BOTTOM_SIDEBAR, ICON_CHAT_AI, ICON_CHECK_FILL,
-    ICON_CLIPBOARD_LINE, ICON_CLOSE_FILL, ICON_CLOSE_LINE, ICON_POSTGRES_VECTOR,
+    ICON_CLIPBOARD_LINE, ICON_CLOSE_FILL, ICON_CLOSE_LINE, ICON_FUNNEL_LINE, ICON_POSTGRES_VECTOR,
     ICON_RESIZE_VERTICAL, READONLY_CELL_CHAR_LIMIT, RESULTS_SCROLLBAR_GUTTER, ROW_HEADER_WIDTH,
 };
 use crate::model::connection::DatabaseDriver;
 use crate::model::settings::{ResultGridDensity, ShortcutBinding};
-use crate::model::table::{ColumnKind, RelationInfo};
+use crate::model::table::{ColumnKind, FilterOperator, RelationInfo};
 use crate::ui::ids::{
-    cell_input_id, result_tabs_scroll_id, results_horizontal_scroll_id, results_vertical_scroll_id,
+    cell_input_id, filter_rules_scroll_id, filter_value_input_id, result_tabs_scroll_id,
+    results_horizontal_scroll_id, results_vertical_scroll_id,
 };
 use crate::ui::styles::{
     ai_fix_button_style, alert_style, compact_button_style, compact_button_style_with_text_color,
+    compact_input_style, compact_pick_list_menu_style, compact_pick_list_style,
     compact_primary_button_style, compact_secondary_button_style, compact_tab_active_button_style,
     modal_backdrop_style, panel_border_style, panel_style, resize_handle_style, table_cell_style,
     table_header_style, table_input_style, table_row_header_style,
@@ -27,7 +29,8 @@ use crate::utils::helpers::{is_null_value, is_postgres_vector_type_name};
 use crate::utils::text::{compact_inline_preview, max_chars_for_width, truncate_with_ellipsis};
 use iced::border::Radius;
 use iced::widget::{
-    Row, button, container, mouse_area, row, scrollable, space, stack, text, text_editor,
+    Row, button, container, mouse_area, pick_list, row, scrollable, space, stack, text,
+    text_editor, text_input,
 };
 use iced::{Background, Border, Center, Element, Fill, Length, Padding, alignment, mouse};
 
@@ -155,12 +158,181 @@ impl App {
                 }))
                 .spacing(spacing);
         }
+        if let Some(filter_bar) = self.filter_bar() {
+            body = body.push(filter_bar);
+        }
         let body = body.push(results).spacing(spacing).height(Fill).width(Fill);
 
         iced::widget::column![resize_handle, body]
             .spacing(0)
             .height(Fill)
             .into()
+    }
+
+    pub(crate) fn filter_bar(&self) -> Option<Element<'_, Message>> {
+        let (table, filter) = self.workspace.filter_draft.as_ref()?;
+        if self.filterable_table() != Some(table) {
+            return None;
+        }
+        let message = |message| {
+            Message::Workspace(crate::app::features::workspace::Message::Results(message))
+        };
+        use crate::app::features::workspace::results::Message as Results;
+        let columns: Vec<String> = self
+            .workspace
+            .results
+            .current
+            .as_ref()
+            .map(|results| results.columns.clone())
+            .unwrap_or_default();
+        let field_width = |value: f32| Length::Fixed(self.scale_f32(value));
+        let modern = self.modern();
+        let menu_height = Length::Fixed(self.scale_f32(240.0));
+
+        let header = row![
+            self.icon_text(ICON_FUNNEL_LINE)
+                .size(self.label_text_size()),
+            text(self.tracked_caption("Filter"))
+                .font(self.ui_font())
+                .size(self.label_text_size()),
+            button(self.label_text(if filter.match_any {
+                "Match any"
+            } else {
+                "Match all"
+            }))
+            .padding(self.button_padding_tight())
+            .style(compact_button_style)
+            .on_press(message(Results::ToggleFilterMatchAny)),
+            button(self.label_text("Add condition"))
+                .padding(self.button_padding_tight())
+                .style(compact_button_style)
+                .on_press(message(Results::AddFilterRule)),
+            space::horizontal(),
+            button(self.label_text("Clear"))
+                .padding(self.button_padding_tight())
+                .style(move |theme, status| if modern {
+                    compact_secondary_button_style(theme, status)
+                } else {
+                    compact_button_style(theme, status)
+                })
+                .on_press(message(Results::ClearFilter)),
+            button(self.label_text("Apply"))
+                .padding(self.button_padding_tight())
+                .style(move |theme: &iced::Theme, status| if modern {
+                    compact_primary_button_style(theme, status)
+                } else {
+                    compact_button_style_with_text_color(
+                        theme,
+                        status,
+                        theme.extended_palette().primary.base.color,
+                    )
+                })
+                .on_press(message(Results::ApplyFilter)),
+            button(self.icon_text(ICON_CLOSE_LINE).size(self.label_text_size()))
+                .padding(self.button_padding_tight())
+                .style(compact_button_style)
+                .on_press(message(Results::ToggleFilterBar)),
+        ]
+        .spacing(self.scale_u16(6))
+        .align_y(Center);
+
+        let mut rules = iced::widget::column![].spacing(self.scale_u16(4));
+        for (index, rule) in filter.rules.iter().enumerate() {
+            let column: Element<'_, Message> = if rule.operator == FilterOperator::Sql {
+                space::horizontal().width(field_width(160.0)).into()
+            } else {
+                pick_list(columns.clone(), Some(rule.column.clone()), move |column| {
+                    message(Results::FilterColumnChanged(index, column))
+                })
+                .padding(self.input_padding())
+                .text_size(self.input_text_size())
+                .font(self.ui_font())
+                .handle(self.pick_list_handle())
+                .style(compact_pick_list_style)
+                .menu_style(compact_pick_list_menu_style)
+                .menu_height(menu_height)
+                .width(field_width(160.0))
+                .into()
+            };
+            let operator = pick_list(FilterOperator::ALL, Some(rule.operator), move |operator| {
+                message(Results::FilterOperatorChanged(index, operator))
+            })
+            .padding(self.input_padding())
+            .text_size(self.input_text_size())
+            .font(self.ui_font())
+            .handle(self.pick_list_handle())
+            .style(compact_pick_list_style)
+            .menu_style(compact_pick_list_menu_style)
+            .menu_height(menu_height)
+            .width(field_width(130.0));
+            let value: Element<'_, Message> = if rule.operator.takes_value() {
+                let placeholder = crate::i18n::tr(if rule.operator == FilterOperator::Sql {
+                    "WHERE condition"
+                } else {
+                    "Value"
+                });
+                text_input(&placeholder, &rule.value)
+                    .id(filter_value_input_id(index))
+                    .on_input(move |value| message(Results::FilterValueChanged(index, value)))
+                    .on_submit(message(Results::ApplyFilter))
+                    .padding(self.input_padding())
+                    .size(self.input_text_size())
+                    .font(self.editor_font())
+                    .style(compact_input_style)
+                    .width(field_width(320.0))
+                    .into()
+            } else {
+                space::horizontal().width(field_width(320.0)).into()
+            };
+            let remove = button(self.icon_text(ICON_CLOSE_LINE).size(self.label_text_size()))
+                .padding(self.button_padding_tight())
+                .style(compact_button_style)
+                .on_press(message(Results::RemoveFilterRule(index)));
+            rules = rules.push(
+                row![column, operator, value, remove]
+                    .spacing(self.scale_u16(6))
+                    .align_y(Center),
+            );
+        }
+
+        let rules = container(scrollable(rules).id(filter_rules_scroll_id()).width(Fill))
+            .max_height(self.scale_f32(168.0));
+        Some(
+            container(iced::widget::column![header, rules].spacing(self.scale_u16(4)))
+                .padding(self.scale_u16(6))
+                .width(Fill)
+                .style(panel_style)
+                .into(),
+        )
+    }
+
+    pub(crate) fn filter_toolbar_button(&self, padding: [f32; 2]) -> Element<'_, Message> {
+        let open = self.workspace.filter_draft.is_some();
+        let button = button(self.icon_text(ICON_FUNNEL_LINE))
+            .padding(padding)
+            .style(move |theme, status| {
+                if open {
+                    compact_tab_active_button_style(theme, status)
+                } else {
+                    compact_button_style(theme, status)
+                }
+            });
+        let button: Element<'_, Message> = if self.filterable_table().is_some() {
+            button
+                .on_press(Message::Workspace(
+                    crate::app::features::workspace::Message::Results(
+                        crate::app::features::workspace::results::Message::ToggleFilterBar,
+                    ),
+                ))
+                .into()
+        } else {
+            button.into()
+        };
+        self.with_shortcut_tooltip(
+            button,
+            "Filter",
+            &self.settings.values.toggle_filter_shortcut,
+        )
     }
 
     pub(crate) fn pagination_controls(&self) -> Element<'_, Message> {
@@ -674,17 +846,36 @@ impl App {
             }
         };
 
-        let menu = iced::widget::column![
-            copy_button,
-            copy_headers_button,
-            copy_sql_button,
-            export_csv_button,
-            export_json_button,
-            export_xlsx_button,
-            delete_button
-        ]
-        .spacing(self.scale_u16(2))
-        .width(Length::Fixed(self.scale_f32(220.0)));
+        let quick_filter = |label, operator| {
+            button(self.label_text(label))
+                .padding(self.button_padding_tight())
+                .width(Fill)
+                .style(compact_button_style)
+                .on_press(Message::Workspace(
+                    crate::app::features::workspace::Message::Results(
+                        crate::app::features::workspace::results::Message::QuickFilter(operator),
+                    ),
+                ))
+        };
+        let menu = if self.filterable_table().is_some() {
+            iced::widget::column![
+                quick_filter("Filter by value", FilterOperator::Equals),
+                quick_filter("Exclude value", FilterOperator::NotEquals),
+                quick_filter("Filter column...", FilterOperator::Contains),
+            ]
+        } else {
+            iced::widget::column![]
+        };
+        let menu = menu
+            .push(copy_button)
+            .push(copy_headers_button)
+            .push(copy_sql_button)
+            .push(export_csv_button)
+            .push(export_json_button)
+            .push(export_xlsx_button)
+            .push(delete_button)
+            .spacing(self.scale_u16(2))
+            .width(Length::Fixed(self.scale_f32(220.0)));
 
         let menu = if self.chat_available() && self.workspace.results.current.is_some() {
             menu.push(
@@ -785,32 +976,71 @@ impl App {
         let separator = if self.modern() { "   " } else { " | " };
         let status_text = status_parts.join(separator);
 
+        let accent = crate::ui::theme::appearance_color(
+            self.settings.values.accent_color,
+            self.theme().palette().primary,
+        );
+        let mut badge_bg = accent;
+        badge_bg.a = 0.20;
+        let badge_padding = [self.scale_u16(1), self.scale_u16(6)];
+        let badge_style = move |_: &iced::Theme| container::Style {
+            background: Some(Background::Color(badge_bg)),
+            border: Border {
+                color: accent,
+                width: 1.0,
+                radius: Radius::from(10.0),
+            },
+            ..container::Style::default()
+        };
+        let badge_text = |content: String| {
+            text(content)
+                .font(self.ui_font())
+                .size(self.label_text_size().saturating_sub(2))
+                .color(accent)
+        };
         let pending_badge: Element<'_, Message> = if pending > 0 {
-            let accent = crate::ui::theme::appearance_color(
-                self.settings.values.accent_color,
-                self.theme().palette().primary,
-            );
-            let mut badge_bg = accent;
-            badge_bg.a = 0.20;
-            container(
-                text(format!("{} {}", crate::i18n::tr("pending"), pending))
-                    .font(self.ui_font())
-                    .size(self.label_text_size().saturating_sub(2))
-                    .color(accent),
-            )
-            .padding([self.scale_u16(1), self.scale_u16(6)])
-            .style(move |_| container::Style {
-                background: Some(Background::Color(badge_bg)),
-                border: Border {
-                    color: accent,
-                    width: 1.0,
-                    radius: Radius::from(10.0),
-                },
-                ..container::Style::default()
-            })
+            container(badge_text(format!(
+                "{} {}",
+                crate::i18n::tr("pending"),
+                pending
+            )))
+            .padding(badge_padding)
+            .style(badge_style)
             .into()
         } else {
             space::horizontal().into()
+        };
+        let filter_message = |message| {
+            Message::Workspace(crate::app::features::workspace::Message::Results(message))
+        };
+        let filter_badge: Element<'_, Message> = match self
+            .filterable_table()
+            .and_then(|table| self.workspace.table_filters.get(table))
+        {
+            Some(filter) => container(
+                row![
+                    badge_text(crate::i18n::tr_with(
+                        "{count} filters",
+                        &[("{count}", &filter.rules.len().to_string())],
+                    )),
+                    button(
+                        self.icon_text(ICON_CLOSE_LINE)
+                            .size(self.label_text_size().saturating_sub(2))
+                            .color(accent),
+                    )
+                    .padding(0)
+                    .style(button::text)
+                    .on_press(filter_message(
+                        crate::app::features::workspace::results::Message::ClearFilter,
+                    )),
+                ]
+                .spacing(self.scale_u16(4))
+                .align_y(Center),
+            )
+            .padding(badge_padding)
+            .style(badge_style)
+            .into(),
+            None => space::horizontal().width(Length::Shrink).into(),
         };
 
         let has_table_results = self.workspace.results.current.is_some()
@@ -855,7 +1085,7 @@ impl App {
             space::horizontal().width(Length::Shrink).into()
         };
         let pager = self.pagination_controls();
-        let controls = row![pager, actions]
+        let controls = row![filter_badge, pager, actions]
             .spacing(self.scale_u16(6))
             .align_y(Center);
 

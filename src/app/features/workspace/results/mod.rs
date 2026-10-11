@@ -1,6 +1,6 @@
 use super::types::RowContextMenuState;
 use crate::app::types::ResultsExportFormat;
-use crate::model::table::{ColumnResize, ResultSet};
+use crate::model::table::{ColumnResize, FilterOperator, ResultSet};
 use iced::widget::{scrollable, text_editor};
 use iced::{Point, mouse};
 use std::collections::HashMap;
@@ -73,6 +73,16 @@ pub(crate) enum Message {
     TextModalAction(text_editor::Action),
     TextModalSave,
     CloseTextModal,
+    ToggleFilterBar,
+    FilterColumnChanged(usize, String),
+    FilterOperatorChanged(usize, FilterOperator),
+    FilterValueChanged(usize, String),
+    AddFilterRule,
+    RemoveFilterRule(usize),
+    ToggleFilterMatchAny,
+    ApplyFilter,
+    ClearFilter,
+    QuickFilter(FilterOperator),
 }
 
 pub(crate) struct State {

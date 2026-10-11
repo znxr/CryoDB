@@ -8,6 +8,14 @@ pub(crate) fn text_field_id(name: &str) -> Id {
     Id::from(format!("field:{name}"))
 }
 
+pub(crate) fn filter_value_input_id(index: usize) -> Id {
+    Id::from(format!("filter-value-{index}"))
+}
+
+pub(crate) fn filter_rules_scroll_id() -> Id {
+    Id::from("filter-rules-scroll")
+}
+
 pub(crate) fn table_search_input_id() -> Id {
     Id::from("table-search-input")
 }

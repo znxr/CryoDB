@@ -1124,6 +1124,11 @@ impl<'a> View<'a> {
                 ShortcutCaptureTarget::OpenTableInfoSidebar,
                 &self.state.values.open_table_info_sidebar_shortcut,
             ),
+            (
+                "Toggle table filters",
+                ShortcutCaptureTarget::ToggleFilter,
+                &self.state.values.toggle_filter_shortcut,
+            ),
         ];
         let shortcut_rows = shortcut_entries.into_iter().fold(
             iced::widget::column![].spacing(self.presentation.scale_u16(1)),

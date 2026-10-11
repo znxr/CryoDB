@@ -65,6 +65,11 @@ impl App {
         self.workspace.query.editor_blurred = false;
     }
 
+    pub(crate) fn blur_query_editor(&mut self) {
+        self.workspace.query.editor.lose_focus();
+        self.workspace.query.editor_blurred = true;
+    }
+
     pub(crate) fn sync_code_snippets(&mut self) {
         let theme = self.theme();
         let font = self.editor_font();

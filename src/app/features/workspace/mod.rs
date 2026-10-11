@@ -1,4 +1,4 @@
-use crate::model::table::{TableCacheEntry, TableRelationFilter, TableSortState};
+use crate::model::table::{TableCacheEntry, TableFilter, TableSortState};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub(crate) mod diagram;
@@ -35,7 +35,8 @@ pub(crate) struct State {
     pub(crate) table_cache_bytes_estimate: usize,
     pub(crate) table_inactive_since: HashMap<String, std::time::Instant>,
     pub(crate) inactive_table_tabs_released: HashSet<String>,
-    pub(crate) table_filters: HashMap<String, TableRelationFilter>,
+    pub(crate) table_filters: HashMap<String, TableFilter>,
+    pub(crate) filter_draft: Option<(String, TableFilter)>,
     pub(crate) table_sorts: HashMap<String, TableSortState>,
     pub(crate) selected_table: Option<String>,
 }
@@ -60,6 +61,7 @@ impl State {
             table_inactive_since: HashMap::new(),
             inactive_table_tabs_released: HashSet::new(),
             table_filters: HashMap::new(),
+            filter_draft: None,
             table_sorts: HashMap::new(),
             selected_table: None,
         }

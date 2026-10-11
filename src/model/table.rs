@@ -194,10 +194,74 @@ impl PostgresSidebarObject {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct TableRelationFilter {
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct TableFilter {
+    pub(crate) rules: Vec<FilterRule>,
+    pub(crate) match_any: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FilterRule {
     pub(crate) column: String,
+    pub(crate) operator: FilterOperator,
     pub(crate) value: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FilterOperator {
+    Equals,
+    NotEquals,
+    Contains,
+    StartsWith,
+    EndsWith,
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+    IsNull,
+    IsNotNull,
+    Sql,
+}
+
+impl FilterOperator {
+    pub(crate) const ALL: &'static [Self] = &[
+        Self::Equals,
+        Self::NotEquals,
+        Self::Contains,
+        Self::StartsWith,
+        Self::EndsWith,
+        Self::Less,
+        Self::LessOrEqual,
+        Self::Greater,
+        Self::GreaterOrEqual,
+        Self::IsNull,
+        Self::IsNotNull,
+        Self::Sql,
+    ];
+
+    pub(crate) fn takes_value(self) -> bool {
+        !matches!(self, Self::IsNull | Self::IsNotNull)
+    }
+}
+
+impl std::fmt::Display for FilterOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            Self::Equals => "=",
+            Self::NotEquals => "<>",
+            Self::Contains => "contains",
+            Self::StartsWith => "starts with",
+            Self::EndsWith => "ends with",
+            Self::Less => "<",
+            Self::LessOrEqual => "<=",
+            Self::Greater => ">",
+            Self::GreaterOrEqual => ">=",
+            Self::IsNull => "is NULL",
+            Self::IsNotNull => "is not NULL",
+            Self::Sql => "SQL",
+        };
+        f.write_str(&crate::i18n::tr(label))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

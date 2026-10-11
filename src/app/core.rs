@@ -136,6 +136,14 @@ impl App {
             None => content,
         };
 
+        let content = iced::widget::stack![
+            content,
+            iced::widget::canvas(crate::ui::widgets::bounds_probe::PressProbe(|position| {
+                Message::Shell(crate::app::shell::Message::PointerPressed(position))
+            }))
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill),
+        ];
         let content: Element<'_, Message> = iced::widget::mouse_area(content)
             .on_move(|value| Message::Shell(crate::app::shell::Message::GlobalCursorMoved(value)))
             .on_release(Message::Shell(

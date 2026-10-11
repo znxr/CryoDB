@@ -5431,188 +5431,38 @@ fn validation_probe_query(driver: DatabaseDriver, statement: &str) -> String {
 
 fn split_sql_statements(input: &str) -> Vec<String> {
     let mut statements = Vec::new();
-    let mut current = String::new();
-    let bytes = input.as_bytes();
-    let mut index = 0usize;
-    let mut single = false;
-    let mut double = false;
-    let mut backtick = false;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut dollar_tag: Option<String> = None;
-
-    while index < bytes.len() {
-        if let Some(tag) = dollar_tag.as_deref() {
-            if input[index..].starts_with(tag) {
-                current.push_str(tag);
-                index += tag.len();
-                dollar_tag = None;
-                continue;
-            }
-            current.push(bytes[index] as char);
-            index += 1;
+    let mut delimiter = String::from(";");
+    let mut chunk = String::new();
+    for line in input.split_inclusive('\n').chain([""]) {
+        let mut words = line.split_whitespace();
+        let directive = words
+            .next()
+            .is_some_and(|word| word.eq_ignore_ascii_case("delimiter"));
+        if !directive && !line.is_empty() {
+            chunk.push_str(line);
             continue;
         }
-
-        let ch = bytes[index] as char;
-        let next = bytes.get(index + 1).copied().map(char::from);
-
-        if line_comment {
-            current.push(ch);
-            index += 1;
-            if ch == '\n' {
-                line_comment = false;
-            }
-            continue;
+        let parts: Vec<&str> = if delimiter == ";" {
+            crate::utils::sql_parse::split_sql_statements(&chunk)
+                .into_iter()
+                .map(|statement| statement.strip_suffix(';').unwrap_or(statement))
+                .collect()
+        } else {
+            chunk.split(delimiter.as_str()).collect()
+        };
+        statements.extend(
+            parts
+                .into_iter()
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(String::from),
+        );
+        chunk.clear();
+        if let Some(next) = words.next() {
+            delimiter = next.to_string();
         }
-
-        if block_comment {
-            current.push(ch);
-            index += 1;
-            if ch == '*' && next == Some('/') {
-                current.push('/');
-                index += 1;
-                block_comment = false;
-            }
-            continue;
-        }
-
-        if single {
-            current.push(ch);
-            index += 1;
-            if ch == '\\'
-                && let Some(next) = next
-            {
-                current.push(next);
-                index += 1;
-                continue;
-            }
-            if ch == '\'' {
-                if next == Some('\'') {
-                    current.push('\'');
-                    index += 1;
-                } else {
-                    single = false;
-                }
-            }
-            continue;
-        }
-
-        if double {
-            current.push(ch);
-            index += 1;
-            if ch == '"' {
-                if next == Some('"') {
-                    current.push('"');
-                    index += 1;
-                } else {
-                    double = false;
-                }
-            }
-            continue;
-        }
-
-        if backtick {
-            current.push(ch);
-            index += 1;
-            if ch == '`' {
-                if next == Some('`') {
-                    current.push('`');
-                    index += 1;
-                } else {
-                    backtick = false;
-                }
-            }
-            continue;
-        }
-
-        if ch == '$'
-            && let Some(tag) = parse_dollar_tag(&input[index..])
-        {
-            current.push_str(&tag);
-            index += tag.len();
-            dollar_tag = Some(tag);
-            continue;
-        }
-
-        if ch == '-' && next == Some('-') {
-            current.push('-');
-            current.push('-');
-            index += 2;
-            line_comment = true;
-            continue;
-        }
-
-        if ch == '#' {
-            current.push('#');
-            index += 1;
-            line_comment = true;
-            continue;
-        }
-
-        if ch == '/' && next == Some('*') {
-            current.push('/');
-            current.push('*');
-            index += 2;
-            block_comment = true;
-            continue;
-        }
-
-        match ch {
-            '\'' => {
-                single = true;
-                current.push(ch);
-                index += 1;
-            }
-            '"' => {
-                double = true;
-                current.push(ch);
-                index += 1;
-            }
-            '`' => {
-                backtick = true;
-                current.push(ch);
-                index += 1;
-            }
-            ';' => {
-                let statement = current.trim();
-                if !statement.is_empty() {
-                    statements.push(statement.to_string());
-                }
-                current.clear();
-                index += 1;
-            }
-            _ => {
-                current.push(ch);
-                index += 1;
-            }
-        }
-    }
-
-    let statement = current.trim();
-    if !statement.is_empty() {
-        statements.push(statement.to_string());
     }
     statements
-}
-
-fn parse_dollar_tag(input: &str) -> Option<String> {
-    if !input.starts_with('$') {
-        return None;
-    }
-    let bytes = input.as_bytes();
-    let mut index = 1usize;
-    while index < bytes.len() {
-        let ch = bytes[index] as char;
-        if ch == '$' {
-            return Some(input[..=index].to_string());
-        }
-        if !(ch.is_ascii_alphanumeric() || ch == '_') {
-            return None;
-        }
-        index += 1;
-    }
-    None
 }
 
 fn statement_kind(query: &str) -> &'static str {
@@ -6396,7 +6246,7 @@ fn write_value_to_output(value: &Value, render: &ResolvedRender) -> Result<(), C
 
 fn query_output_to_json(output: &QueryOutput) -> Value {
     match output {
-        QueryOutput::Affected(count) => json!({ "rows_affected": count }),
+        QueryOutput::Affected(count) => json!([{ "rows_affected": count }]),
         QueryOutput::Rows(rows) => Value::Array(
             rows.rows
                 .iter()

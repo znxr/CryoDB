@@ -9,8 +9,8 @@ use crate::db::codecs::sql_literal_from_value_for_driver;
 use crate::model::connection::DatabaseDriver;
 use crate::model::settings::ResultGridDensity;
 use crate::model::table::{
-    ColumnKind, PostgresObjectKind, PostgresSidebarObject, RelationInfo, ResultSet,
-    TableCacheEntry, TableRelationFilter,
+    ColumnKind, FilterOperator, FilterRule, PostgresObjectKind, PostgresSidebarObject,
+    RelationInfo, ResultSet, TableCacheEntry, TableFilter,
 };
 use crate::ui::ids::{cell_input_id, results_vertical_scroll_id};
 use crate::utils::helpers::{
@@ -498,15 +498,99 @@ impl App {
         format!("SELECT COUNT(*) FROM {}{};", safe_table, filter_clause)
     }
 
-    pub(crate) fn table_filter_clause(&self, filter: &TableRelationFilter) -> String {
+    pub(crate) fn table_filter_clause(&self, filter: &TableFilter) -> String {
         let driver = self.connections.current.driver;
-        let column = sql_quote_identifier(driver, &filter.column);
-        if is_null_value(&filter.value) {
-            format!(" WHERE {} IS NULL", column)
-        } else {
-            let escaped_value = sql_escape_string_literal(driver, &filter.value);
-            format!(" WHERE {} = '{}'", column, escaped_value)
+        let postgres = driver == DatabaseDriver::PostgreSql;
+        let conditions: Vec<String> = filter
+            .rules
+            .iter()
+            .filter(|rule| match rule.operator {
+                FilterOperator::Sql => !rule.value.trim().is_empty(),
+                _ => !rule.column.is_empty(),
+            })
+            .map(|rule| {
+                let column = sql_quote_identifier(driver, &rule.column);
+                let text_column = if postgres {
+                    format!("{column}::text")
+                } else {
+                    column.clone()
+                };
+                let like = if postgres { "ILIKE" } else { "LIKE" };
+                let value = sql_escape_string_literal(driver, &rule.value);
+                let null = is_null_value(&rule.value);
+                match rule.operator {
+                    FilterOperator::Equals if null => format!("{column} IS NULL"),
+                    FilterOperator::NotEquals if null => format!("{column} IS NOT NULL"),
+                    FilterOperator::Equals => format!("{column} = '{value}'"),
+                    FilterOperator::NotEquals => format!("{column} <> '{value}'"),
+                    FilterOperator::Contains => format!("{text_column} {like} '%{value}%'"),
+                    FilterOperator::StartsWith => format!("{text_column} {like} '{value}%'"),
+                    FilterOperator::EndsWith => format!("{text_column} {like} '%{value}'"),
+                    FilterOperator::Less => format!("{column} < '{value}'"),
+                    FilterOperator::LessOrEqual => format!("{column} <= '{value}'"),
+                    FilterOperator::Greater => format!("{column} > '{value}'"),
+                    FilterOperator::GreaterOrEqual => format!("{column} >= '{value}'"),
+                    FilterOperator::IsNull => format!("{column} IS NULL"),
+                    FilterOperator::IsNotNull => format!("{column} IS NOT NULL"),
+                    FilterOperator::Sql => format!("({})", rule.value.trim()),
+                }
+            })
+            .collect();
+        if conditions.is_empty() {
+            return String::new();
         }
+        let join = if filter.match_any { " OR " } else { " AND " };
+        format!(" WHERE {}", conditions.join(join))
+    }
+
+    pub(crate) fn filterable_table(&self) -> Option<&String> {
+        self.workspace
+            .selected_table
+            .as_ref()
+            .filter(|_| self.workspace.query.last_query_was_table)
+    }
+
+    pub(crate) fn blank_filter_rule(&self) -> FilterRule {
+        let column = self
+            .workspace
+            .results
+            .current
+            .as_ref()
+            .and_then(|results| results.columns.first().cloned())
+            .unwrap_or_default();
+        FilterRule {
+            column,
+            operator: FilterOperator::Contains,
+            value: String::new(),
+        }
+    }
+
+    pub(crate) fn filter_draft_rule(&mut self, index: usize) -> Option<&mut FilterRule> {
+        self.workspace
+            .filter_draft
+            .as_mut()
+            .and_then(|(_, filter)| filter.rules.get_mut(index))
+    }
+
+    pub(crate) fn apply_table_filter(
+        &mut self,
+        table: String,
+        filter: TableFilter,
+    ) -> Task<Message> {
+        if self.workspace.query.running
+            || self.workspace.results.applying_changes
+            || !self.workspace.results.pending_edits.is_empty()
+        {
+            return Task::none();
+        }
+        if self.table_filter_clause(&filter).is_empty() {
+            self.workspace.table_filters.remove(&table);
+        } else {
+            self.workspace.table_filters.insert(table.clone(), filter);
+        }
+        self.workspace.table_pages.insert(table.clone(), 0);
+        self.remove_table_cache_for_table(&table);
+        self.start_table_query(table, 0, false)
     }
 
     pub(crate) fn structure_query_for(&self, table: &str) -> String {

@@ -845,6 +845,8 @@ impl App {
                 );
         }
 
+        actions = actions.push(self.filter_toolbar_button(self.button_padding()));
+
         if !self.is_query_editor_hidden() && self.settings.values.ai_enabled {
             actions = actions.push(self.modern_toolbar_icon(
                 ICON_CHAT_AI,
@@ -1024,7 +1026,9 @@ impl App {
                 .push(self.with_tooltip(clear_button, "Clear results"));
         }
 
-        actions = actions.push(self.structure_toggle_button());
+        actions = actions
+            .push(self.structure_toggle_button())
+            .push(self.filter_toolbar_button(self.button_padding_icon()));
 
         if !hide_editor && self.settings.values.ai_enabled {
             actions = actions.push(self.ai_query_button());

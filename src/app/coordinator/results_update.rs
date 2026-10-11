@@ -6,9 +6,12 @@ use crate::app::types::{ErrorModalState, ResultsExportFormat, ToastLevel};
 use crate::app::update::export_results_file;
 use crate::constants::COLUMN_WIDTH_MIN;
 use crate::db::edits::{apply_table_changes, delete_table_rows};
-use crate::model::table::{ColumnResize, SortDirection, TableRelationFilter, TableSortState};
+use crate::model::table::{
+    ColumnResize, FilterOperator, FilterRule, SortDirection, TableFilter, TableSortState,
+};
 use crate::ui::ids::{
-    result_tabs_scroll_id, results_horizontal_scroll_id, results_vertical_scroll_id,
+    filter_rules_scroll_id, filter_value_input_id, result_tabs_scroll_id,
+    results_horizontal_scroll_id, results_vertical_scroll_id,
 };
 use crate::utils::helpers::is_valid_json;
 use iced::widget::scrollable;
@@ -160,9 +163,17 @@ impl App {
                 if self.workspace.query.running {
                     return Task::none();
                 }
-                self.workspace
-                    .table_filters
-                    .insert(table.clone(), TableRelationFilter { column, value });
+                self.workspace.table_filters.insert(
+                    table.clone(),
+                    TableFilter {
+                        rules: vec![FilterRule {
+                            column,
+                            operator: FilterOperator::Equals,
+                            value,
+                        }],
+                        match_any: false,
+                    },
+                );
                 self.workspace.table_pages.insert(table.clone(), 0);
                 self.remove_table_cache_for_table(&table);
                 self.select_table(table, 0, true)
@@ -592,6 +603,130 @@ impl App {
                 self.workspace.results.row_drag_active = false;
                 self.workspace.results.row_drag_anchor = None;
                 Task::none()
+            }
+            ResultsMessage::ToggleFilterBar => {
+                let Some(table) = self.filterable_table().cloned() else {
+                    return Task::none();
+                };
+                if self
+                    .workspace
+                    .filter_draft
+                    .as_ref()
+                    .is_some_and(|(open, _)| open == &table)
+                {
+                    self.workspace.filter_draft = None;
+                    return Task::none();
+                }
+                let mut filter = self
+                    .workspace
+                    .table_filters
+                    .get(&table)
+                    .cloned()
+                    .unwrap_or_default();
+                if filter.rules.is_empty() {
+                    filter.rules.push(self.blank_filter_rule());
+                }
+                self.workspace.filter_draft = Some((table, filter));
+                iced::widget::operation::focus(filter_value_input_id(0))
+            }
+            ResultsMessage::FilterColumnChanged(index, column) => {
+                if let Some(rule) = self.filter_draft_rule(index) {
+                    rule.column = column;
+                }
+                Task::none()
+            }
+            ResultsMessage::FilterOperatorChanged(index, operator) => {
+                if let Some(rule) = self.filter_draft_rule(index) {
+                    rule.operator = operator;
+                }
+                Task::none()
+            }
+            ResultsMessage::FilterValueChanged(index, value) => {
+                if let Some(rule) = self.filter_draft_rule(index) {
+                    rule.value = value;
+                }
+                Task::none()
+            }
+            ResultsMessage::AddFilterRule => {
+                let rule = self.blank_filter_rule();
+                let Some((_, filter)) = self.workspace.filter_draft.as_mut() else {
+                    return Task::none();
+                };
+                filter.rules.push(rule);
+                Task::batch([
+                    iced::widget::operation::focus(filter_value_input_id(filter.rules.len() - 1)),
+                    iced::widget::operation::snap_to_end(filter_rules_scroll_id()),
+                ])
+            }
+            ResultsMessage::RemoveFilterRule(index) => {
+                if let Some((_, filter)) = self.workspace.filter_draft.as_mut()
+                    && index < filter.rules.len()
+                {
+                    filter.rules.remove(index);
+                }
+                Task::none()
+            }
+            ResultsMessage::ToggleFilterMatchAny => {
+                if let Some((_, filter)) = self.workspace.filter_draft.as_mut() {
+                    filter.match_any = !filter.match_any;
+                }
+                Task::none()
+            }
+            ResultsMessage::ApplyFilter => {
+                let Some((table, filter)) = self.workspace.filter_draft.clone() else {
+                    return Task::none();
+                };
+                self.apply_table_filter(table, filter)
+            }
+            ResultsMessage::ClearFilter => {
+                let Some(table) = self.filterable_table().cloned() else {
+                    return Task::none();
+                };
+                self.workspace.filter_draft = None;
+                self.apply_table_filter(table, TableFilter::default())
+            }
+            ResultsMessage::QuickFilter(operator) => {
+                self.workspace.results.row_context_menu = None;
+                let Some(table) = self.filterable_table().cloned() else {
+                    return Task::none();
+                };
+                let (Some(results), Some((row, column))) = (
+                    self.workspace.results.current.as_ref(),
+                    self.workspace.results.selected_cell,
+                ) else {
+                    return Task::none();
+                };
+                let Some(column_name) = results.columns.get(column).cloned() else {
+                    return Task::none();
+                };
+                let value = results
+                    .rows
+                    .get(row)
+                    .and_then(|values| values.get(column))
+                    .cloned()
+                    .unwrap_or_default();
+                let mut filter = self
+                    .workspace
+                    .table_filters
+                    .get(&table)
+                    .cloned()
+                    .unwrap_or_default();
+                filter.rules.push(FilterRule {
+                    column: column_name,
+                    operator,
+                    value,
+                });
+                if operator == FilterOperator::Contains {
+                    let index = filter.rules.len() - 1;
+                    self.workspace.filter_draft = Some((table, filter));
+                    return iced::widget::operation::focus(filter_value_input_id(index));
+                }
+                if let Some((open, draft)) = self.workspace.filter_draft.as_mut()
+                    && open == &table
+                {
+                    *draft = filter.clone();
+                }
+                self.apply_table_filter(table, filter)
             }
             ResultsMessage::ResultHeaderPressed { column } => {
                 if self.workspace.query.running || self.workspace.results.applying_changes {

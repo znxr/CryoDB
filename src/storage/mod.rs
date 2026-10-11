@@ -771,6 +771,11 @@ fn parse_settings_store_with(
             {
                 settings.open_table_info_sidebar_shortcut = binding;
             }
+            if let Some(shortcut) = store.toggle_filter_shortcut
+                && let Some(binding) = ShortcutBinding::parse(&shortcut)
+            {
+                settings.toggle_filter_shortcut = binding;
+            }
             if let Some(prefix) = store.omni_prefix {
                 settings.omni_prefix = normalize_omni_prefix(&prefix);
             }

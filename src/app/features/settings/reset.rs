@@ -126,6 +126,7 @@ impl State {
                 self.values.last_results_page_shortcut = defaults.last_results_page_shortcut;
                 self.values.open_table_info_sidebar_shortcut =
                     defaults.open_table_info_sidebar_shortcut;
+                self.values.toggle_filter_shortcut = defaults.toggle_filter_shortcut;
                 self.values.omni_prefix = defaults.omni_prefix;
                 self.shortcut_capture_target = None;
             }
@@ -268,6 +269,9 @@ impl State {
             }
             ShortcutCaptureTarget::OpenTableInfoSidebar => {
                 self.values.open_table_info_sidebar_shortcut = shortcut;
+            }
+            ShortcutCaptureTarget::ToggleFilter => {
+                self.values.toggle_filter_shortcut = shortcut;
             }
         }
     }

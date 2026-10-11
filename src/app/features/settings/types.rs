@@ -22,6 +22,7 @@ pub(crate) enum ShortcutCaptureTarget {
     FirstResultsPage,
     LastResultsPage,
     OpenTableInfoSidebar,
+    ToggleFilter,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -411,6 +411,10 @@ impl ShortcutBinding {
         Self::parse_with_primary_modifier("Primary + I")
     }
 
+    pub(crate) fn default_toggle_filter() -> Self {
+        Self::parse_with_primary_modifier("Primary + Alt + F")
+    }
+
     pub(crate) fn table_options() -> Vec<Self> {
         ["Primary + P", "Primary + K", "Primary + O"]
             .into_iter()
@@ -732,6 +736,7 @@ pub(crate) struct SettingsStore {
     pub(crate) first_results_page_shortcut: Option<String>,
     pub(crate) last_results_page_shortcut: Option<String>,
     pub(crate) open_table_info_sidebar_shortcut: Option<String>,
+    pub(crate) toggle_filter_shortcut: Option<String>,
     pub(crate) omni_prefix: Option<String>,
     pub(crate) emphasize_column_headers: Option<bool>,
     pub(crate) auto_scroll_sidebar_to_selected_table: Option<bool>,
@@ -852,6 +857,7 @@ impl SettingsStore {
             open_table_info_sidebar_shortcut: Some(
                 settings.open_table_info_sidebar_shortcut.serialize_value(),
             ),
+            toggle_filter_shortcut: Some(settings.toggle_filter_shortcut.serialize_value()),
             omni_prefix: Some(settings.omni_prefix.clone()),
             emphasize_column_headers: Some(settings.emphasize_column_headers),
             auto_scroll_sidebar_to_selected_table: Some(
@@ -981,6 +987,7 @@ pub(crate) struct Settings {
     pub(crate) first_results_page_shortcut: ShortcutBinding,
     pub(crate) last_results_page_shortcut: ShortcutBinding,
     pub(crate) open_table_info_sidebar_shortcut: ShortcutBinding,
+    pub(crate) toggle_filter_shortcut: ShortcutBinding,
     pub(crate) omni_prefix: String,
     pub(crate) emphasize_column_headers: bool,
     pub(crate) auto_scroll_sidebar_to_selected_table: bool,
@@ -1093,6 +1100,7 @@ impl Default for Settings {
             first_results_page_shortcut: ShortcutBinding::default_first_results_page(),
             last_results_page_shortcut: ShortcutBinding::default_last_results_page(),
             open_table_info_sidebar_shortcut: ShortcutBinding::default_open_table_info_sidebar(),
+            toggle_filter_shortcut: ShortcutBinding::default_toggle_filter(),
             omni_prefix: String::from(":"),
             emphasize_column_headers: true,
             auto_scroll_sidebar_to_selected_table: false,

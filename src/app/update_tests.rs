@@ -1594,6 +1594,33 @@ mod tests {
     }
 
     #[test]
+    fn clicking_outside_the_query_editor_releases_it() {
+        let _guard = EDITOR_FOCUS_LOCK.lock();
+        let (mut app, _) = App::new();
+        app.connections.connected = true;
+        app.workspace.query.editor_bounds.set(iced::Rectangle::new(
+            iced::Point::ORIGIN,
+            iced::Size::new(400.0, 200.0),
+        ));
+        app.workspace.query.editor.request_focus();
+        let _ = app
+            .workspace
+            .query
+            .editor
+            .update(&iced_code_editor::Message::CanvasFocusGained);
+
+        let _ = app.update(Message::Shell(crate::app::shell::Message::PointerPressed(
+            iced::Point::new(10.0, 10.0),
+        )));
+        assert!(app.query_editor_focused());
+
+        let _ = app.update(Message::Shell(crate::app::shell::Message::PointerPressed(
+            iced::Point::new(10.0, 300.0),
+        )));
+        assert!(!app.query_editor_focused());
+    }
+
+    #[test]
     fn query_editor_run_shortcut_does_not_insert_a_newline() {
         let _guard = EDITOR_FOCUS_LOCK.lock();
         let (mut app, _) = App::new();
